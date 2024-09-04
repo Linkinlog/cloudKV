@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+option go_package = "gitlab.com/linkinlog/cloudKV/frontend/grpc";
+
+message GetRequest {
+    string key = 1;
+}
+
+message GetResponse {
+    string value = 1;
+}
+
+message PutRequest {
+    string key = 1;
+    string value = 2;
+}
+
+message PutResponse {
+    string key = 1;
+    string value = 2;
+}
+
+message DeleteRequest {
+    string key = 1;
+}
+
+message DeleteResponse {
+    string key = 1;
+}
+
+service KeyValue {
+    rpc Get(GetRequest) returns (GetResponse);
+
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+    rpc Put(PutRequest) returns (PutResponse);
+}

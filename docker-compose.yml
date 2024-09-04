@@ -1,0 +1,51 @@
+services:
+  kvs:
+    container_name: kvs
+    build:
+      context: .
+      dockerfile: build/kvs.Dockerfile
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-8008}:8008"
+    environment:
+      FRONTEND_PORT: ${FRONTEND_PORT}
+      FRONTEND: ${FRONTEND}
+      LOGGER: ${LOGGER}
+      SQUEAL_USER: ${SQUEAL_USER}
+      SQUEAL_PASS: ${SQUEAL_PASS}
+      SQUEAL_HOST: squeal
+      SQUEAL_DB: cloudKV
+    # Required to use File logger
+    volumes:
+      - kvs-data:/app/kvs
+    depends_on:
+      squeal:
+        condition: service_healthy
+    networks:
+      - cloudKV
+  squeal:
+    container_name: squeal
+    image: postgres
+    restart: always
+    shm_size: 128mb
+    ports:
+      - "${SQUEAL_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: cloudKV
+      POSTGRES_USER: ${SQUEAL_USER}
+      POSTGRES_PASSWORD: ${SQUEAL_PASS}
+    volumes:
+      - squeal-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SQUEAL_USER} -d cloudKV"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cloudKV
+volumes:
+  squeal-data:
+  kvs-data:
+networks:
+  cloudKV:
+    driver: bridge
