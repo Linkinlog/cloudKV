@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"gitlab.com/linkinlog/cloudKV/env"
+	"gitlab.com/linkinlog/cloudKV/featureflags"
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
 )
@@ -20,19 +21,35 @@ type RESTServer struct {
 func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{key}", get(kv))
-	mux.HandleFunc("PUT /{key}", s.put(kv))
-	mux.HandleFunc("DELETE /{key}", s.del(kv))
+	mux.HandleFunc("GET /{key}", tracingMiddleware(get(kv)))
+	mux.HandleFunc("PUT /{key}", tracingMiddleware(s.put(kv)))
+	mux.HandleFunc("DELETE /{key}", tracingMiddleware(s.del(kv)))
 
 	errs := make(chan error)
 
+    server := &http.Server{
+        Addr: env.FrontendPort(),
+        Handler: mux,
+    }
 	go func() {
-		if err := http.ListenAndServe(env.FrontendPort(), mux); err != nil {
+		if err := server.ListenAndServe(); err != nil {
 			errs <- fmt.Errorf("can't hear shit! %w", err)
 		}
 	}()
 
 	return errs
+}
+
+func tracingMiddleware(next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if featureflags.Enabled("tracing", r) {
+			handler := otelhttp.NewHandler(next, "root")
+
+			handler.ServeHTTP(w, r)
+		} else {
+			next.ServeHTTP(w, r)
+		}
+	})
 }
 
 func get(kv *store.KeyValueStore) http.HandlerFunc {
