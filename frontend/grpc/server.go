@@ -24,6 +24,43 @@ type GRPCServer struct {
 	l logger.Logger
 
 	err chan error
+
+	grpcServer *grpc.Server
+	listener   net.Listener
+}
+
+func (s *GRPCServer) Start(kv *store.KeyValueStore) <-chan error {
+	s.kv = kv
+	s.err = make(chan error)
+
+	gs := grpc.NewServer()
+	s.grpcServer = gs
+
+	RegisterKeyValueServer(gs, s)
+
+	go func() {
+		lis, err := net.Listen("tcp", env.FrontendPort())
+		if err != nil {
+			s.err <- fmt.Errorf("can't hear shit! %w", err)
+		} else {
+			s.listener = lis
+		}
+
+		if err := gs.Serve(lis); err != nil {
+			s.err <- fmt.Errorf("failed to serve game! %w", err)
+		}
+	}()
+
+	return s.err
+}
+
+func (s *GRPCServer) Close(ctx context.Context) error {
+	if err := s.listener.Close(); err != nil {
+		return err
+	}
+
+	s.grpcServer.GracefulStop()
+	return nil
 }
 
 func (s *GRPCServer) Get(ctx context.Context, gr *GetRequest) (*GetResponse, error) {
@@ -44,7 +81,7 @@ func (s *GRPCServer) Put(ctx context.Context, pr *PutRequest) (*PutResponse, err
 		return nil, err
 	}
 
-    return &PutResponse{Key: pr.Key, Value: pr.Value}, nil
+	return &PutResponse{Key: pr.Key, Value: pr.Value}, nil
 }
 
 func (s *GRPCServer) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResponse, error) {
@@ -56,27 +93,5 @@ func (s *GRPCServer) Delete(ctx context.Context, dr *DeleteRequest) (*DeleteResp
 		return nil, err
 	}
 
-    return &DeleteResponse{Key: dr.Key}, nil
-}
-
-func (s *GRPCServer) Start(kv *store.KeyValueStore) <-chan error {
-	s.kv = kv
-	s.err = make(chan error)
-
-	gs := grpc.NewServer()
-
-	RegisterKeyValueServer(gs, s)
-
-	go func() {
-		lis, err := net.Listen("tcp", env.FrontendPort())
-		if err != nil {
-			s.err <- fmt.Errorf("can't hear shit! %w", err)
-		}
-
-		if err := gs.Serve(lis); err != nil {
-			s.err <- fmt.Errorf("failed to serve game! %w", err)
-		}
-	}()
-
-	return s.err
+	return &DeleteResponse{Key: dr.Key}, nil
 }

@@ -14,6 +14,8 @@ RUN make build
 
 FROM scratch
 
+ENV HOME=/root
+
 COPY --from=builder /app/main .
 
 CMD [ "./main" ]

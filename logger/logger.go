@@ -23,7 +23,7 @@ type Logger interface {
 func New(l LoggerType) (Logger, error) {
 	switch l {
 	case File:
-		return NewFileTransactionLogger("/app/kvs/data")
+		return NewFileTransactionLogger(env.ConfigPath() + "/data")
 	case PSQL:
 		params := PostgresDBParams{
 			dbName:   env.DBName(),

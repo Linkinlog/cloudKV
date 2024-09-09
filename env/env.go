@@ -12,12 +12,8 @@ func FrontendPort() string {
 	)
 }
 
-func Frontend() string {
-	return lookupWithFallback("FRONTEND", "GRPC")
-}
-
-func Logger() string {
-	return lookupWithFallback("LOGGER", "File")
+func ConfigPath() string {
+	return lookupWithFallback("CONFIG_PATH", "/app/kvs")
 }
 
 func DBHost() string {

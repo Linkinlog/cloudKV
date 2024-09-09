@@ -1,6 +1,8 @@
 package frontend
 
 import (
+	"context"
+
 	"gitlab.com/linkinlog/cloudKV/frontend/grpc"
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
@@ -8,6 +10,7 @@ import (
 
 type Frontend interface {
 	Start(*store.KeyValueStore) <-chan error
+    Close(ctx context.Context) error
 }
 
 func New(l logger.Logger, f FrontendType) Frontend {

@@ -8,16 +8,15 @@ services:
     ports:
       - "${FRONTEND_PORT:-8008}:8008"
     environment:
+      CONFIG_PATH: ${CONFIG_PATH}
       FRONTEND_PORT: ${FRONTEND_PORT}
-      FRONTEND: ${FRONTEND}
-      LOGGER: ${LOGGER}
       SQUEAL_USER: ${SQUEAL_USER}
       SQUEAL_PASS: ${SQUEAL_PASS}
       SQUEAL_HOST: squeal
       SQUEAL_DB: cloudKV
     # Required to use File logger
     volumes:
-      - kvs-data:/app/kvs
+      - kvs-data:/app/cloudKV
     depends_on:
       squeal:
         condition: service_healthy

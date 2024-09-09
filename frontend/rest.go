@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -8,6 +9,7 @@ import (
 	"gitlab.com/linkinlog/cloudKV/featureflags"
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func NewRESTServer(l logger.Logger) *RESTServer {
@@ -16,6 +18,7 @@ func NewRESTServer(l logger.Logger) *RESTServer {
 
 type RESTServer struct {
 	l logger.Logger
+    s *http.Server
 }
 
 func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
@@ -31,6 +34,8 @@ func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
         Addr: env.FrontendPort(),
         Handler: mux,
     }
+    s.s = server
+
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
 			errs <- fmt.Errorf("can't hear shit! %w", err)
@@ -38,6 +43,13 @@ func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 	}()
 
 	return errs
+}
+
+func (s *RESTServer) Close(ctx context.Context) error {
+    if s.s == nil {
+        return nil
+    }
+    return s.s.Shutdown(ctx)
 }
 
 func tracingMiddleware(next http.Handler) http.HandlerFunc {
