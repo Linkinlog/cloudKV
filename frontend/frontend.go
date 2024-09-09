@@ -10,7 +10,7 @@ import (
 
 type Frontend interface {
 	Start(*store.KeyValueStore) <-chan error
-    Close(ctx context.Context) error
+	Close(ctx context.Context) error
 }
 
 func New(l logger.Logger, f FrontendType) Frontend {
@@ -43,5 +43,5 @@ const (
 )
 
 func (f FrontendType) String() string {
-    return []string{"GRPC", "REST"}[f-1]
+	return []string{"GRPC", "REST"}[f-1]
 }

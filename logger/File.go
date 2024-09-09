@@ -83,7 +83,7 @@ func (ftl *FileTransactionLogger) ReadEvents() (<-chan store.Event, <-chan error
 		for scanner.Scan() {
 			line := scanner.Text()
 
-            line = strings.ReplaceAll(line, " ", "_")
+			line = strings.ReplaceAll(line, " ", "_")
 			if _, err := fmt.Sscanf(
 				line, "%d\t%d\t%s\t%s",
 				&e.Sequence, &e.EventType, &e.Key, &e.Value,
@@ -91,8 +91,8 @@ func (ftl *FileTransactionLogger) ReadEvents() (<-chan store.Event, <-chan error
 				outError <- fmt.Errorf("input parse error: %w", err)
 				return
 			}
-            e.Key = strings.ReplaceAll(e.Key, "_", " ")
-            e.Value = strings.ReplaceAll(e.Value, "_", " ")
+			e.Key = strings.ReplaceAll(e.Key, "_", " ")
+			e.Value = strings.ReplaceAll(e.Value, "_", " ")
 
 			if ftl.last >= e.Sequence {
 				outError <- fmt.Errorf("sequence number error: %d >= %d", ftl.last, e.Sequence)

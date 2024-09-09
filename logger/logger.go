@@ -50,7 +50,7 @@ func ToLoggerType(s string) LoggerType {
 type LoggerType int
 
 const (
-    _ LoggerType = iota
+	_ LoggerType = iota
 	File
 	PSQL
 )

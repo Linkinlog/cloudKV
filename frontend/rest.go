@@ -18,7 +18,7 @@ func NewRESTServer(l logger.Logger) *RESTServer {
 
 type RESTServer struct {
 	l logger.Logger
-    s *http.Server
+	s *http.Server
 }
 
 func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
@@ -30,11 +30,11 @@ func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 
 	errs := make(chan error)
 
-    server := &http.Server{
-        Addr: env.FrontendPort(),
-        Handler: mux,
-    }
-    s.s = server
+	server := &http.Server{
+		Addr:    env.FrontendPort(),
+		Handler: mux,
+	}
+	s.s = server
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
@@ -46,10 +46,10 @@ func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 }
 
 func (s *RESTServer) Close(ctx context.Context) error {
-    if s.s == nil {
-        return nil
-    }
-    return s.s.Shutdown(ctx)
+	if s.s == nil {
+		return nil
+	}
+	return s.s.Shutdown(ctx)
 }
 
 func tracingMiddleware(next http.Handler) http.HandlerFunc {
