@@ -39,7 +39,7 @@ func init() {
 
 func main() {
 	opts := slog.HandlerOptions{AddSource: true, Level: slog.LevelInfo}
-	slogger := slog.New(slog.NewTextHandler(os.Stdout, &opts))
+	slogger := slog.New(slog.NewJSONHandler(os.Stdout, &opts))
 
 	conf, err := GetOrMakeConfig(configPath)
 	if err != nil {

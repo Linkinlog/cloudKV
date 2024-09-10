@@ -10,23 +10,28 @@ import (
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func NewRESTServer(l logger.Logger) *RESTServer {
-	return &RESTServer{l: l}
+	t := featureflags.New(featureflags.UseTelemetry, nil).Enabled()
+	return &RESTServer{l: l, telemetry: t}
 }
 
 type RESTServer struct {
 	l logger.Logger
 	s *http.Server
+
+	telemetry bool
 }
 
 func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{key}", tracingMiddleware(get(kv)))
-	mux.HandleFunc("PUT /{key}", tracingMiddleware(s.put(kv)))
-	mux.HandleFunc("DELETE /{key}", tracingMiddleware(s.del(kv)))
+	mux.HandleFunc("GET /{key}", telemetryMiddleware(s.get(kv)))
+	mux.HandleFunc("PUT /{key}", telemetryMiddleware(s.put(kv)))
+	mux.HandleFunc("DELETE /{key}", telemetryMiddleware(s.del(kv)))
 
 	errs := make(chan error)
 
@@ -38,7 +43,7 @@ func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil {
-			errs <- fmt.Errorf("can't hear shit! %w", err)
+			errs <- fmt.Errorf("(REST) can't hear shit! %w", err)
 		}
 	}()
 
@@ -52,9 +57,9 @@ func (s *RESTServer) Close(ctx context.Context) error {
 	return s.s.Shutdown(ctx)
 }
 
-func tracingMiddleware(next http.Handler) http.HandlerFunc {
+func telemetryMiddleware(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if featureflags.Enabled("tracing", r) {
+		if featureflags.New(featureflags.UseTelemetry, nil).Enabled() {
 			handler := otelhttp.NewHandler(next, "root")
 
 			handler.ServeHTTP(w, r)
@@ -64,7 +69,7 @@ func tracingMiddleware(next http.Handler) http.HandlerFunc {
 	})
 }
 
-func get(kv *store.KeyValueStore) http.HandlerFunc {
+func (s *RESTServer) get(kv *store.KeyValueStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := r.PathValue("key")
 
@@ -79,6 +84,16 @@ func get(kv *store.KeyValueStore) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte("unable to get key"))
 			return
+		}
+
+		if s.telemetry {
+			ctx := r.Context()
+			if sp := trace.SpanFromContext(ctx); sp != nil {
+				sp.SetAttributes(
+					attribute.String("key", key),
+					attribute.String("value", val),
+				)
+			}
 		}
 
 		_, _ = w.Write([]byte(val))
@@ -114,7 +129,18 @@ func (s *RESTServer) put(kv *store.KeyValueStore) http.HandlerFunc {
 			return
 		}
 
+		if s.telemetry {
+			ctx := r.Context()
+			if sp := trace.SpanFromContext(ctx); sp != nil {
+				sp.SetAttributes(
+					attribute.String("key", key),
+					attribute.String("value", val),
+				)
+			}
+		}
+
 		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(key))
 	}
 }
 
@@ -138,6 +164,15 @@ func (s *RESTServer) del(kv *store.KeyValueStore) http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte(err.Error()))
 			return
+		}
+
+		if s.telemetry {
+			ctx := r.Context()
+			if sp := trace.SpanFromContext(ctx); sp != nil {
+				sp.SetAttributes(
+					attribute.String("key", key),
+				)
+			}
 		}
 
 		w.WriteHeader(http.StatusOK)

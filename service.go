@@ -4,9 +4,16 @@ import (
 	"context"
 	"log/slog"
 
+	"gitlab.com/linkinlog/cloudKV/env"
+	ff "gitlab.com/linkinlog/cloudKV/featureflags"
 	"gitlab.com/linkinlog/cloudKV/frontend"
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	"go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 func NewService(f frontend.Frontend, l logger.Logger, sl *slog.Logger) *Service {
@@ -31,7 +38,17 @@ func (s *Service) Start() {
 
 	s.logger.Run()
 
-	keyVal := store.New()
+	telemetry := ff.New(ff.UseTelemetry, nil).Enabled()
+
+	if telemetry {
+		if err, shutdown := setupTelemetry(); err != nil {
+			panic(err)
+		} else if shutdown != nil {
+			defer func() { _ = shutdown(ctx) }()
+		}
+	}
+
+	keyVal := store.New(telemetry)
 	if err := s.replay(keyVal); err != nil {
 		panic(err)
 	}
@@ -58,23 +75,24 @@ func (s *Service) Stop() {
 	if s.cancel != nil {
 		s.cancel()
 	}
+
+	s.logger.Close()
+
 	if err := s.frontend.Close(context.Background()); err != nil {
 		s.slogger.Error("s.frontend.Close()", "error", err.Error())
 	}
-	s.logger.Close()
 }
 
-func (s *Service) Switch(l logger.Logger, f frontend.Frontend) {
-	s.Stop()
-
-	if l != nil {
-		s.logger = l
-	}
+func (s *Service) SwitchFrontend(f frontend.Frontend) {
 	if f != nil {
 		s.frontend = f
 	}
+}
 
-	go s.Start()
+func (s *Service) SwitchLogger(l logger.Logger) {
+	if l != nil {
+		s.logger = l
+	}
 }
 
 func (s *Service) replay(kv *store.KeyValueStore) error {
@@ -107,4 +125,37 @@ func (s *Service) replay(kv *store.KeyValueStore) error {
 	}
 
 	return nil
+}
+
+func setupTelemetry() (error, func(context.Context) error) {
+	res, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceName(env.ServiceName()),
+		),
+	)
+	if err != nil {
+		return err, nil
+	}
+
+	endpoint := env.JaegerEndpoint()
+
+	jaeger, err := otlptracegrpc.New(
+		context.Background(),
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		return err, nil
+	}
+
+	tp := trace.NewTracerProvider(
+		trace.WithResource(res),
+		trace.WithBatcher(jaeger),
+	)
+
+	otel.SetTracerProvider(tp)
+
+	return nil, tp.Shutdown
 }

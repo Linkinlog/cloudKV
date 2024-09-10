@@ -6,9 +6,11 @@ services:
       dockerfile: build/kvs.Dockerfile
     restart: always
     ports:
-      - "${FRONTEND_PORT:-8008}:8008"
+      - "8008:8008"
     environment:
       CONFIG_PATH: ${CONFIG_PATH}
+      JAEGER_ENDPOINT: ${JAEGER_ENDPOINT}
+      USE_TELEMETRY: ${USE_TELEMETRY}
       FRONTEND_PORT: ${FRONTEND_PORT}
       SQUEAL_USER: ${SQUEAL_USER}
       SQUEAL_PASS: ${SQUEAL_PASS}
@@ -42,9 +44,36 @@ services:
       retries: 10
     networks:
       - cloudKV
+  caddy:
+    container_name: caddy
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./build/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - cloudKV
+  jaeger:
+    container_name: jaeger
+    image: jaegertracing/all-in-one:1.60
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "16686:16686"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - cloudKV
 volumes:
   squeal-data:
   kvs-data:
+  caddy_data:
+  caddy_config:
 networks:
   cloudKV:
     driver: bridge

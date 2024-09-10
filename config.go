@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"os"
 
@@ -13,12 +12,12 @@ import (
 	"gitlab.com/linkinlog/cloudKV/logger"
 )
 
-type Config struct {
+type ConfigFile struct {
 	Logger   string `json:"logger"`
 	Frontend string `json:"frontend"`
 }
 
-var defaultConfig = Config{
+var defaultConfig = ConfigFile{
 	Logger:   "File",
 	Frontend: "REST",
 }
@@ -47,19 +46,22 @@ func watchFile(configPath string, s *Service, sl *slog.Logger) (<-chan error, co
 						return
 					}
 
-					// TODO cleanup so we arent always making new ones
+					s.Stop()
+
 					lt := logger.ToLoggerType(conf.Logger)
-					logger, err := logger.New(lt)
+					l, err := logger.New(lt)
 					if err != nil {
 						errs <- err
 						return
 					}
+					s.SwitchLogger(l)
 
 					ft := frontend.ToFrontendType(conf.Frontend)
-					frontend := frontend.New(logger, ft)
+					f := frontend.New(l, ft)
+					s.SwitchFrontend(f)
 
 					sl.Info("config change detected, reloading", "logger", lt.String(), "frontend", ft.String())
-					s.Switch(logger, frontend)
+					go s.Start()
 				}
 			case err, ok := <-watcher.Errors:
 				if !ok {
@@ -68,7 +70,6 @@ func watchFile(configPath string, s *Service, sl *slog.Logger) (<-chan error, co
 				errs <- err
 				return
 			case <-ctx.Done():
-				fmt.Println("ctx.Done()")
 				return
 			}
 		}
@@ -85,13 +86,13 @@ func watchFile(configPath string, s *Service, sl *slog.Logger) (<-chan error, co
 	return errs, cancel
 }
 
-func GetConfig(configPath string) (*Config, error) {
+func GetConfig(configPath string) (*ConfigFile, error) {
 	file, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	conf := &Config{}
+	conf := &ConfigFile{}
 	if err := json.Unmarshal(file, conf); err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func GetConfig(configPath string) (*Config, error) {
 	return conf, nil
 }
 
-func GetOrMakeConfig(configPath string) (*Config, error) {
+func GetOrMakeConfig(configPath string) (*ConfigFile, error) {
 	existingConf, err := GetConfig(configPath)
 	if existingConf != nil && err == nil {
 		return existingConf, nil

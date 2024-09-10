@@ -2,12 +2,14 @@ package grpc
 
 import (
 	context "context"
+	"errors"
 	"fmt"
 	"net"
 
 	"gitlab.com/linkinlog/cloudKV/env"
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -33,7 +35,9 @@ func (s *GRPCServer) Start(kv *store.KeyValueStore) <-chan error {
 	s.kv = kv
 	s.err = make(chan error)
 
-	gs := grpc.NewServer()
+	gs := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	s.grpcServer = gs
 
 	RegisterKeyValueServer(gs, s)
@@ -41,13 +45,15 @@ func (s *GRPCServer) Start(kv *store.KeyValueStore) <-chan error {
 	go func() {
 		lis, err := net.Listen("tcp", env.FrontendPort())
 		if err != nil {
-			s.err <- fmt.Errorf("can't hear shit! %w", err)
+			s.err <- fmt.Errorf("(GRPC) can't hear shit! %w", err)
+			return
 		} else {
 			s.listener = lis
 		}
 
 		if err := gs.Serve(lis); err != nil {
-			s.err <- fmt.Errorf("failed to serve game! %w", err)
+			s.err <- fmt.Errorf("(GRPC) failed to serve game! %w", err)
+			return
 		}
 	}()
 
@@ -55,6 +61,9 @@ func (s *GRPCServer) Start(kv *store.KeyValueStore) <-chan error {
 }
 
 func (s *GRPCServer) Close(ctx context.Context) error {
+	if s.listener == nil || s.grpcServer == nil {
+		return errors.New("nil listener/grpc server")
+	}
 	if err := s.listener.Close(); err != nil {
 		return err
 	}

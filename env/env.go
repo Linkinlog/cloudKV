@@ -5,6 +5,14 @@ import (
 	"os"
 )
 
+func ServiceName() string {
+	return lookupWithFallback("SERVICE_NAME", "cloudKV")
+}
+
+func JaegerEndpoint() string {
+	return lookupWithFallback("JEAGER_ENDPOINT", "jaeger:4317")
+}
+
 func FrontendPort() string {
 	return fmt.Sprintf(
 		":%s",

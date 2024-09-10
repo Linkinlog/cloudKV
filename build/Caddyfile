@@ -1,0 +1,11 @@
+http://kv.test {
+	reverse_proxy kvs:8008
+}
+
+http://squeal.test {
+	reverse_proxy squeal:5432
+}
+
+http://jaeger.test {
+	reverse_proxy jaeger:16686
+}

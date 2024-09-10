@@ -1,33 +1,34 @@
 package featureflags
 
 import (
-	"net/http"
 	"os"
+	"strings"
 )
 
-func init() {
-	flagEnabler = map[string]enabler{}
-	flagEnabler["tracing"] = hasFlagInCookie
+const (
+	UseTelemetry = "USE_TELEMETRY"
+)
+
+type FeatureFlag interface {
+	Enabled() bool
 }
 
-var flagEnabler map[string]enabler
-
-type enabler func(flag string, r *http.Request) bool
-
-func Enabled(flag string, r *http.Request) bool {
-	if _, ok := os.LookupEnv(flag); ok {
-		return true
+func New(flag string, config interface{}) FeatureFlag {
+	switch flag {
+	case UseTelemetry:
+		return &useTelemetry{}
 	}
 
-	e, ok := flagEnabler[flag]
+	return nil
+}
+
+type useTelemetry struct{}
+
+func (ut *useTelemetry) Enabled() bool {
+	val, ok := os.LookupEnv(UseTelemetry)
 	if !ok {
 		return false
 	}
 
-	return e(flag, r)
-}
-
-func hasFlagInCookie(flag string, r *http.Request) bool {
-	_, err := r.Cookie(flag)
-	return err == nil
+	return strings.EqualFold(val, "true")
 }
