@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
+	"runtime"
 
 	"gitlab.com/linkinlog/cloudKV/env"
 	ff "gitlab.com/linkinlog/cloudKV/featureflags"
@@ -10,7 +12,11 @@ import (
 	"gitlab.com/linkinlog/cloudKV/logger"
 	"gitlab.com/linkinlog/cloudKV/store"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
@@ -37,6 +43,20 @@ func (s *Service) Start() {
 	s.cancel = cancel
 
 	s.logger.Run()
+
+	exporter, err := prometheus.New()
+	if err != nil {
+		panic(err)
+	}
+
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter))
+	defer func() { _ = provider.Shutdown(ctx) }()
+
+	meter := provider.Meter(env.ServiceName())
+
+	if err := buildRuntimeObservers(meter); err != nil {
+		panic(err)
+	}
 
 	telemetry := ff.New(ff.UseTelemetry, nil).Enabled()
 
@@ -158,4 +178,42 @@ func setupTelemetry() (error, func(context.Context) error) {
 	otel.SetTracerProvider(tp)
 
 	return nil, tp.Shutdown
+}
+
+var attributes = []attribute.KeyValue{
+	attribute.Key("application").String(env.ServiceName()),
+	attribute.Key("container_id").String(os.Getenv("HOSTNAME")),
+}
+
+func buildRuntimeObservers(meter metric.Meter) error {
+	var err error
+	var m runtime.MemStats
+
+	_, err = meter.Int64ObservableUpDownCounter("cloudkv_memory_usage_bytes",
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			runtime.ReadMemStats(&m)
+			o.Observe(int64(m.Sys), metric.WithAttributes(attributes...))
+			return nil
+		}),
+		metric.WithDescription("Amount of memory used."),
+		metric.WithUnit("By"),
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = meter.Int64ObservableGauge(
+		"cloudkv_num_goroutines",
+		metric.WithInt64Callback(func(_ context.Context, o metric.Int64Observer) error {
+			o.Observe(int64(runtime.NumGoroutine()), metric.WithAttributes(attributes...))
+			return nil
+		}),
+		metric.WithDescription("Number of running goroutines."),
+		metric.WithUnit("{goroutine}"),
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

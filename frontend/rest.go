@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/linkinlog/cloudKV/env"
 	"gitlab.com/linkinlog/cloudKV/featureflags"
 	"gitlab.com/linkinlog/cloudKV/logger"
@@ -29,9 +30,11 @@ type RESTServer struct {
 func (s *RESTServer) Start(kv *store.KeyValueStore) <-chan error {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /{key}", telemetryMiddleware(s.get(kv)))
-	mux.HandleFunc("PUT /{key}", telemetryMiddleware(s.put(kv)))
-	mux.HandleFunc("DELETE /{key}", telemetryMiddleware(s.del(kv)))
+	mux.Handle("/metrics", promhttp.Handler())
+
+	mux.HandleFunc("GET /api/{key}", telemetryMiddleware(s.get(kv)))
+	mux.HandleFunc("PUT /api/{key}", telemetryMiddleware(s.put(kv)))
+	mux.HandleFunc("DELETE /api/{key}", telemetryMiddleware(s.del(kv)))
 
 	errs := make(chan error)
 

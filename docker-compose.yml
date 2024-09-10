@@ -69,6 +69,18 @@ services:
       COLLECTOR_OTLP_ENABLED: true
     networks:
       - cloudKV
+    depends_on:
+      - kvs
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    volumes:
+      - ./build/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - cloudKV
+    depends_on:
+      - kvs
 volumes:
   squeal-data:
   kvs-data:
