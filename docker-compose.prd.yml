@@ -1,0 +1,78 @@
+services:
+  kvs:
+    container_name: kvs
+    build:
+      context: .
+      dockerfile: build/kvs.Dockerfile
+    restart: always
+    ports:
+      - "8008:8008"
+    environment:
+      CONFIG_PATH: ${CONFIG_PATH}
+      JAEGER_ENDPOINT: ${JAEGER_ENDPOINT}
+      USE_TELEMETRY: ${USE_TELEMETRY}
+      FRONTEND_PORT: ${FRONTEND_PORT}
+      SQUEAL_USER: ${SQUEAL_USER}
+      SQUEAL_PASS: ${SQUEAL_PASS}
+      SQUEAL_HOST: squeal
+      SQUEAL_DB: cloudKV
+    # Required to use File logger
+    volumes:
+      - kvs-data:/app/cloudKV
+    depends_on:
+      squeal:
+        condition: service_healthy
+    networks:
+      - cloudKV
+  squeal:
+    container_name: squeal
+    image: postgres
+    restart: always
+    shm_size: 128mb
+    ports:
+      - "${SQUEAL_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: cloudKV
+      POSTGRES_USER: ${SQUEAL_USER}
+      POSTGRES_PASSWORD: ${SQUEAL_PASS}
+    volumes:
+      - squeal-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SQUEAL_USER} -d cloudKV"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+    networks:
+      - cloudKV
+  jaeger:
+    container_name: jaeger
+    image: jaegertracing/all-in-one:1.60
+    restart: unless-stopped
+    ports:
+      - "4317:4317"
+      - "16686:16686"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    networks:
+      - cloudKV
+    depends_on:
+      - kvs
+  prometheus:
+    image: prom/prometheus:v2.48.1
+    volumes:
+      - ./build/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - cloudKV
+    depends_on:
+      - kvs
+volumes:
+  squeal-data:
+  kvs-data:
+  caddy_data:
+  caddy_config:
+networks:
+  cloudKV:
+    driver: bridge
+
